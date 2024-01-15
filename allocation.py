@@ -45,8 +45,8 @@ work_hours_per_week = st.number_input('Enter number of work hours per week', min
 # Input for number of weeks
 num_weeks = st.number_input('Enter number of weeks', min_value=1, max_value=52, value=3)
 
+st.markdown('---')
 
-# Dynamic input for staff licenses
 st.write("Enter Staff Licenses:")
 staff_licenses = {}
 staff_num = st.number_input('Number of staff members', min_value=1, max_value=20, value=5)
@@ -54,10 +54,14 @@ default_staff_licenses = [['Arizona', 'Texas'], ['Texas', 'Florida', 'New York']
 for i in range(staff_num):
     col1, col2 = st.columns([2, 3])
     with col2:
-        licenses = st.multiselect(f'Select states for Staff {i+1}', states, default=default_staff_licenses[i], key=f'staff_{i}_licenses')
+        # If there are more than 5 workers, default to no state allocation
+        default_licenses = default_staff_licenses[i] if i < 5 else []
+        licenses = st.multiselect(f'Select states for Staff {i+1}', states, default=default_licenses, key=f'staff_{i}_licenses')
     with col1:
         staff_name = st.text_input(f'Staff member {i+1} name', value=f'Staff {i+1}', key=f'staff_{i}_name')
     staff_licenses[staff_name] = licenses
+
+st.markdown('---')
 
 # Dynamic input for state workloads
 st.write("Enter State Workloads:")
@@ -67,10 +71,14 @@ default_state_workloads = [('Florida', 80), ('Arizona', 120), ('New York', 80), 
 for i in range(state_num):
     col1, col2 = st.columns([1, 1])
     with col2:
-        hours = st.number_input(f'Hours for State {i+1}', min_value=0, max_value=1000, value=default_state_workloads[i][1], key=f'hours_{i}')
+        # If there are more than 4 states, default to 0 hours
+        default_hours = default_state_workloads[i][1] if i < 4 else 0
+        hours = st.number_input(f'Hours for State {i+1}', min_value=0, max_value=1000, value=default_hours, key=f'hours_{i}')
     with col1:
-        state = st.selectbox(f'State {i+1}', states, index=states.index(default_state_workloads[i][0]), key=f'state_{i}')
+        state = st.selectbox(f'State {i+1}', states, index=states.index(default_state_workloads[i][0]) if i < 4 else 0, key=f'state_{i}')
     state_workloads[state] = hours
+
+st.markdown('---')
 
 # Button to perform allocation
 if st.button('Allocate Work'):
