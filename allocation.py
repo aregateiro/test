@@ -1,10 +1,10 @@
 import streamlit as st
 import pandas as pd
 
-# Function to allocate work (from previous code)
 def allocate_work(staff_licenses, state_workloads):
     staff_hours = {staff: 0 for staff in staff_licenses}  # Track hours allocated to each staff
     staff_allocations = {staff: {} for staff in staff_licenses}  # Track work allocation for each staff
+    unallocated_work = {}  # Track unallocated work
 
     for state, hours_needed in state_workloads.items():
         while hours_needed > 0:
@@ -12,8 +12,8 @@ def allocate_work(staff_licenses, state_workloads):
             available_staff = [s for s in staff_licenses if state in staff_licenses[s] and staff_hours[s] < 40]
 
             if not available_staff:
-                print(f"Cannot allocate all work for {state}, {hours_needed} hours remain unallocated.")
-                break  # No available staff for this state
+                unallocated_work[state] = unallocated_work.get(state, 0) + hours_needed
+                break
 
             # Distribute workload evenly among available staff
             hours_per_staff = min(hours_needed // len(available_staff), 40)
@@ -23,7 +23,8 @@ def allocate_work(staff_licenses, state_workloads):
                 staff_allocations[staff][state] = staff_allocations[staff].get(state, 0) + allocated_hours
                 hours_needed -= allocated_hours
 
-    return staff_allocations
+    return staff_allocations, unallocated_work
+
 
 import streamlit as st
 
@@ -57,15 +58,17 @@ for i in range(state_num):
     state_workloads[state] = hours
 
 if st.button('Allocate Work'):
-    allocations = allocate_work(staff_licenses, state_workloads)
-    
-    # Prepare data for displaying in a table
-    table_data = []
-    for staff, allocation in allocations.items():
-        for state, hours in allocation.items():
-            table_data.append({'Staff': staff, 'State': state, 'Allocated Hours': hours})
+    allocations, unallocated_work = allocate_work(staff_licenses, state_workloads)
     
     # Displaying the results in a table
     st.write("Allocation Results:")
-    df = pd.DataFrame(table_data)
+    df = pd.DataFrame([(staff, state, hours) for staff, states in allocations.items() for state, hours in states.items()],
+                      columns=['Staff', 'State', 'Allocated Hours'])
     st.table(df)
+
+    # Display warning if there is unallocated work
+    if unallocated_work:
+        st.warning("Warning: Not all work could be allocated due to insufficient or unavailable staff. Unallocated work:")
+        for state, hours in unallocated_work.items():
+            st.write(f"{state}: {hours} hours")
+
