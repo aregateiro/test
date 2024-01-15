@@ -1,4 +1,5 @@
 import streamlit as st
+import pandas as pd
 
 # Function to allocate work (from previous code)
 def allocate_work(staff_licenses, state_workloads):
@@ -55,12 +56,16 @@ for i in range(state_num):
     hours = st.number_input(f'Hours needed for {state}', min_value=0, max_value=1000, value=40, key=f'hours_{i}')
     state_workloads[state] = hours
 
-# Button to perform allocation
 if st.button('Allocate Work'):
     allocations = allocate_work(staff_licenses, state_workloads)
     
+    # Prepare data for displaying in a table
+    table_data = []
+    for staff, allocation in allocations.items():
+        for state, hours in allocation.items():
+            table_data.append({'Staff': staff, 'State': state, 'Allocated Hours': hours})
+    
     # Displaying the results in a table
     st.write("Allocation Results:")
-    for staff, allocation in allocations.items():
-        st.write(f"{staff}: {allocation}")
-
+    df = pd.DataFrame(table_data)
+    st.table(df)
