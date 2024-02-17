@@ -1,31 +1,50 @@
 import streamlit as st
 import pandas as pd
 
-def allocate_work(staff_licenses, state_workloads, hours, weeks):
+import pulp
+def allocate_work(staff_licenses, state_workloads, hours, weeks, switch_penalty=1):
     limit = hours * weeks  # Total hours available for work
-    staff_hours = {staff: 0 for staff in staff_licenses}  # Track hours allocated to each staff
-    staff_allocations = {staff: {} for staff in staff_licenses}  # Track work allocation for each staff
-    unallocated_work = {}  # Track unallocated work
+
+    # Create the 'prob' variable to contain the problem data
+    prob = pulp.LpProblem("Staff Allocation Problem", pulp.LpMinimize)
+
+    # Create decision variables
+    staff_hours = pulp.LpVariable.dicts("StaffHours", 
+                                        ((staff, state) for staff in staff_licenses for state in staff_licenses[staff]),
+                                        lowBound=0, 
+                                        cat='Continuous')
+
+    # Create slack variables
+    slack = pulp.LpVariable.dicts("Slack", state_workloads.keys(), lowBound=0, cat='Continuous')
+
+    # Create binary variables for state switches
+    switches = pulp.LpVariable.dicts("Switches", 
+                                     ((staff, state) for staff in staff_licenses for state in staff_licenses[staff]),
+                                     cat='Binary')
+
+    # Objective function: Minimize the total slack and the total number of state switches
+    prob += pulp.lpSum(slack.values()) + switch_penalty * pulp.lpSum(switches.values())
+
+    # Constraints
+    for staff in staff_licenses:
+        prob += pulp.lpSum([staff_hours[(staff, state)] for state in staff_licenses[staff]]) <= limit, f"HourLimit_{staff}"
 
     for state, hours_needed in state_workloads.items():
-        while hours_needed > 0:
-            # Find staff licensed in the state and with available hours
-            available_staff = [s for s in staff_licenses if state in staff_licenses[s] and staff_hours[s] < limit]
+        prob += pulp.lpSum([staff_hours[(staff, state)] for staff in staff_licenses if state in staff_licenses[staff]]) + slack[state] >= hours_needed, f"Workload_{state}"
 
-            if not available_staff:
-                unallocated_work[state] = unallocated_work.get(state, 0) + hours_needed
-                break
+    # Additional constraints to link the binary variables with the decision variables
+    for staff in staff_licenses:
+        for state in staff_licenses[staff]:
+            prob += staff_hours[(staff, state)] <= limit * switches[(staff, state)], f"Switch_{staff}_{state}"
 
-            # Distribute workload evenly among available staff
-            hours_per_staff = min(hours_needed // len(available_staff), limit)
-            for staff in available_staff:
-                allocated_hours = min(hours_per_staff, limit - staff_hours[staff])
-                staff_hours[staff] += allocated_hours
-                staff_allocations[staff][state] = staff_allocations[staff].get(state, 0) + allocated_hours
-                hours_needed -= allocated_hours
+    # Solve the problem
+    status = prob.solve()
+
+    # Prepare the results
+    staff_allocations = {staff: {state: staff_hours[(staff, state)].varValue for state in staff_licenses[staff]} for staff in staff_licenses}
+    unallocated_work = {state: slack[state].varValue for state in state_workloads}
 
     return staff_allocations, unallocated_work
-
 
 # Streamlit interface
 st.title("Work Allocation App")
@@ -88,10 +107,12 @@ if st.button('Allocate Work'):
     st.write("Allocation Results:")
     df = pd.DataFrame([(staff, state, hours) for staff, states in allocations.items() for state, hours in states.items()],
                       columns=['Staff', 'State', 'Allocated Hours'])
+    df = df[df['Allocated Hours'] > 0]
     st.table(df)
 
     # Display warning if there is unallocated work
-    if unallocated_work:
+    if sum(unallocated_work.values()) > 0:
         st.warning("Warning: Not all work could be allocated due to insufficient or unavailable staff. Unallocated work:")
         for state, hours in unallocated_work.items():
-            st.write(f"{state}: {hours} hours")
+            if hours > 0:
+                st.write(f"{state}: {hours} hours")
